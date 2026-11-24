@@ -1374,6 +1374,18 @@ target_link_libraries(native_expert_parity PRIVATE kernels kernels_cpu artifact 
 add_executable(native_expert_bench tests/kernels/native_expert_bench.cpp)
 target_include_directories(native_expert_bench PRIVATE ${_gpu_include_directories})
 target_link_libraries(native_expert_bench PRIVATE kernels kernels_cpu artifact ${_gpu_runtime_target})
+# the APR trellis experts (TQ2_T .. TQP7) and their Hadamard fold: a double reference, the CPU tier bit for bit per
+# ISA, the grouped GPU kernels against it, the fused rotation against the two kernels, the FP16 dequantizer against
+# the CPU decode, and the paths trellis deliberately does not take (GPU, synthetic, no model; --bench times the
+# grouped kernels, --cpu-bench times the CPU rows per ISA, --refusals checks the refusals without a card)
+add_executable(tq_expert_parity tests/kernels/tq_expert_parity.cpp)
+target_include_directories(tq_expert_parity PRIVATE ${_gpu_include_directories})
+target_link_libraries(tq_expert_parity PRIVATE kernels kernels_cpu mmq ${_gpu_runtime_target})
+basalt_gpu_test(NAME tq_expert_parity COMMAND tq_expert_parity)
+set_tests_properties(tq_expert_parity PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+basalt_cpu_test(NAME tq_expert_refusals COMMAND tq_expert_parity --refusals)
+basalt_cpu_test(NAME tq_expert_cpu_bench COMMAND tq_expert_parity --cpu-bench)
+set_tests_properties(tq_expert_cpu_bench PROPERTIES TIMEOUT 300)
 # IQ1_S and the limited-SwiGLU expert pairs at the engine's expert geometry, GPU and CPU tiers against a double reference
 add_executable(iq1s_parity tests/kernels/iq1s_parity.cpp)
 target_include_directories(iq1s_parity PRIVATE ${_gpu_include_directories} ${CMAKE_CURRENT_SOURCE_DIR}/src)
