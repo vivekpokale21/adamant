@@ -404,6 +404,9 @@ private:
     bool main_high_ = false;
     PeerExperts* peer_ = nullptr;
     std::vector<PeerExperts*> xpeers_;
+    /// Per layer: the device sign vector of a Hadamard-folded gate/up input, nullptr when the layer is not folded.
+    /// Resolved in dm_init (setup), never inside a captured graph: hadamard_device_signs allocates.
+    std::vector<const float*> had_gu_;
     basalt::kernels::cpu::ExpertPool* warm_pool_ = nullptr;
     ExpertSource* warm_src_ = nullptr;
     DecMoe* dm_ = nullptr;   // the device-planned MoE tail (null: off)
