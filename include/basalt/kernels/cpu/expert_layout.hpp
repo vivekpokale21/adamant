@@ -61,9 +61,12 @@ const ExpertLayout& expert_layout();
 /// `layer gu_type d_type offset blob_bytes`, from v7 then `up_type`; further columns are ignored).  A newer version is
 /// refused.
 /// `n_embd` / `n_ff` / `swiglu_limit`: the model's expert geometry.
+/// `hadamard_text`: the pack's `experts.hadamard` section (empty = no folded experts), read by v8 layouts only
+/// (hadamard.hpp).  A v7 pack cannot carry the fold; a fold on a non-trellis expert type is refused.
 bool expert_layout_load_text(const std::string& text, int64_t n_layers, int64_t n_expert, std::string& err,
-                             int64_t n_embd, int64_t n_ff, float swiglu_limit = 0.f);
+                             int64_t n_embd, int64_t n_ff, float swiglu_limit = 0.f,
+                             const std::string& hadamard_text = std::string());
 /// The newest layout version this engine reads.
-inline constexpr int kExpertLayoutVersion = 7;   // v6: NVFP4 blobs end in a 16-byte scale tail; v7: up_type column
+inline constexpr int kExpertLayoutVersion = 8;   // v7: up_type column; v8: the Hadamard fold (experts.hadamard)
 
 }  // namespace basalt::kernels::cpu

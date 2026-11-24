@@ -30,8 +30,35 @@ and is refused as cut short otherwise; the shards of a split model are still che
 ## Packs
 
 - `dense`: F32 and BF16 tensors. `gguf`: quantized non-expert tensors. `experts`: routed experts per layer.
+- `experts.layout`: where each layer's blobs start, their sizes and formats (v8 when the experts are Hadamard-folded).
+- `experts.hadamard`: present only for a GGUF whose experts are stored in a block-Hadamard-rotated basis
+  (`prism.hadamard.*`): the rotation block, the ±1 sign vectors and which roles of each layer are folded.
 - `engram`: the Engram table alone (IQ4_NL rows of 144 bytes), 2 MiB aligned.
 - `vision/mmproj`: present only when built with `--mmproj`; the engine and `basalt-vision --model FILE.basalt` read it in place.
+
+## Trellis (APR) packs
+
+Agention's APR GGUFs store their routed experts as trellis-coded weights (the ggml types `TQ2_T`, `TQK6`, `TQK7`,
+`TQP5`, `TQP6`, `TQP7`, ids 144-149): one block is 128 weights, an fp16 scale and a circular bit stream of trellis
+steps, and each step's state hashes to one or two points of a 2048-point fp16 codebook. They are copied into a pack
+byte for byte, like every other expert format, and their rows on the CPU run on the engine's own kernels
+([tq_cpu.hpp](../include/basalt/kernels/cpu/tq_cpu.hpp)) against Q8_0 activations.
+
+A `Gyro` GGUF also folds its experts: the stored weight is `W diag(s) H_b^T` per block of `b` input columns, so an
+activation must go through `y = H_b (s · x)` before it meets a folded weight. `convert.py` reads the
+`prism.hadamard.*` metadata and writes it as the `experts.hadamard` section with a v8 `experts.layout`; a pack whose
+layout is v8 without that section (or the reverse) is refused at startup, and so is a fold on an expert of a
+non-trellis type, because those kernels quantize an unrotated input. A fold is per layer, so a folded layer keeps the
+same type for gate and up.
+
+```sh
+python3 tools/convert/convert.py --gguf MODEL-TQ1_0.gguf --sections-from BASE.basalt --compat-bf16 --out MODEL.basalt
+```
+
+The format is in [ggml_common_tq.h](../include/basalt/ggml/ggml_common_tq.h) and the rotation in
+[hadamard.hpp](../include/basalt/kernels/cpu/hadamard.hpp); `tests/kernels/cpu/tq_cpu_test.cpp` re-derives the format
+from its documented text and checks every instruction set gives the same bits, and
+`tests/kernels/cpu/hadamard_test.cpp` checks the rotation and the pack's refusals.
 
 ## Flash-Next NVFP4 pack
 
