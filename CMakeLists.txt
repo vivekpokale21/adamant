@@ -1188,7 +1188,7 @@ endif()
 
 add_library(kernels_cpu STATIC src/kernels/cpu/expert.cpp src/kernels/cpu/pool.cpp
             src/kernels/cpu/cpu_quota.cpp src/kernels/cpu/expert_layout.cpp src/kernels/cpu/q2_avx2.cpp
-            src/kernels/cpu/q2_avx2_vnni.cpp)
+            src/kernels/cpu/q2_avx2_vnni.cpp src/kernels/cpu/hadamard.cpp)
 target_include_directories(kernels_cpu PUBLIC include)
 # only the kernel files get the AVX-512 / AVX2 flags; the pool and the probe run on any x86-64,
 # and the engine picks the kernels at run time (cpu_avx512_ok).
@@ -1232,7 +1232,13 @@ target_sources(kernels_cpu PRIVATE src/kernels/cpu/native_expert.cpp src/kernels
                                          src/kernels/cpu/iq_avx2.cpp src/kernels/cpu/iq_avx2_vnni.cpp
                                          src/kernels/cpu/kq_avx2.cpp
                                          src/kernels/cpu/kq_avx1.cpp src/kernels/cpu/ggml/ggml_cpu_dispatch.cpp
+                                         src/kernels/cpu/tq_cpu.cpp src/kernels/cpu/tq_avx2.cpp
+                                         src/kernels/cpu/tq_avx512.cpp
                                          $<TARGET_OBJECTS:ggml_dots_avx2> $<TARGET_OBJECTS:ggml_dots_avx512>)
+# the APR trellis rows (tq_cpu.hpp): tq_cpu.cpp runs on any x86-64 and picks one of the two kernels at run time,
+# so only the kernel files carry the instruction-set flags
+set_source_files_properties(src/kernels/cpu/tq_avx2.cpp PROPERTIES COMPILE_OPTIONS "${_isa_avx2_flags}")
+set_source_files_properties(src/kernels/cpu/tq_avx512.cpp PROPERTIES COMPILE_OPTIONS "${_isa_avx512_flags}")
 # the i-quant rows also use BMI2 (pdep/pext for the sign masks; cpu_avx512_ok requires it). MSVC compiles the
 # intrinsics without a switch.
 if(MSVC)
@@ -1470,6 +1476,15 @@ if(BUILD_TESTING)
   target_link_libraries(iq_avx512_test PRIVATE kernels_cpu platform)
   basalt_cpu_test(NAME iq_avx512_test COMMAND iq_avx512_test)
   set_property(TEST iq_avx512_test APPEND PROPERTY LABELS avx512)
+
+  # the APR trellis rows: the format decoded from its documented text, every ISA bitwise, and a double reference
+  add_executable(tq_cpu_test tests/kernels/cpu/tq_cpu_test.cpp)
+  target_link_libraries(tq_cpu_test PRIVATE kernels_cpu)
+  basalt_cpu_test(NAME tq_cpu_test COMMAND tq_cpu_test)
+  # the activation-side Hadamard rotation of a folded pack: the section, the transform, and the quantizers that apply it
+  add_executable(hadamard_test tests/kernels/cpu/hadamard_test.cpp)
+  target_link_libraries(hadamard_test PRIVATE kernels_cpu)
+  basalt_cpu_test(NAME hadamard_test COMMAND hadamard_test)
 
   # DirectFile has a Linux backend and a Windows backend, and this test covers those two; macOS is not a platform
   # the engine builds for.

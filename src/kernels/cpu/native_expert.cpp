@@ -9,8 +9,11 @@
 #include "basalt/kernels/cpu/nvfp4_avx512.hpp"
 #include "basalt/kernels/cpu/nvfp4_avx2.hpp"
 #include "basalt/kernels/cpu/expert_layout.hpp"
+#include "basalt/kernels/cpu/tq_cpu.hpp"
+#include "basalt/kernels/cpu/hadamard.hpp"
 
 #include "basalt/ggml/ggml.h"
+#include "basalt/ggml/ggml_common_tq.h"   // the trellis block structs (ggml 144-149)
 
 #include <cmath>
 #include <cstdlib>
@@ -71,11 +74,71 @@ void gu_rows_mixed(Rows rows, const NativeFmt& f, const uint8_t* blob, const voi
     }
 }
 
+// Bytes of one row of `n` weights of a native format (0 when the type is not native or n is not whole blocks).
+// The APR trellis types (ggml 144-149) are not in the extracted ggml trait table: their block structs come from
+// ggml_common_tq.h.
+size_t weight_geometry(int t, int64_t n) {
+    if (t >= 144 && t <= 149) {
+        if (n % 128) return 0;
+        switch (t) {
+            case 144: return (size_t) (n / 128) * sizeof(block_tq2_t);
+            case 145: return (size_t) (n / 128) * sizeof(block_tqk6);
+            case 146: return (size_t) (n / 128) * sizeof(block_tqk7);
+            case 147: return (size_t) (n / 128) * sizeof(block_tqp5);
+            case 148: return (size_t) (n / 128) * sizeof(block_tqp6);
+            default:  return (size_t) (n / 128) * sizeof(block_tqp7);
+        }
+    }
+    const ggml_type_traits* tt = ggml_get_type_traits((ggml_type) t);
+    if (tt == nullptr || tt->blck_size == 0 || n % tt->blck_size) return 0;
+    size_t row = ggml_row_size((ggml_type) t, n);
+    return t == GGML_TYPE_NVFP4 ? row + kNvfp4Tail : row;
+}
+
 }  // namespace
 
 bool native_fmt(int gu_type, int d_type, int64_t n_embd, int64_t n_ff, NativeFmt& f, std::string& err,
                 float swiglu_limit, int up_type) {
     if (up_type < 0) up_type = gu_type;
+    if (gu_type >= 144 && gu_type <= 149) {   // the APR trellis formats (tq_cpu.hpp)
+        // These types are not in the extracted ggml CPU tables: the geometry comes from ggml_common_tq.h and the
+        // rows from tq_cpu.hpp.  Their dot products take Q8_0 activations, and a trellis layer has one gate/up
+        // type (the fold is per layer, not per half).
+        if (tq_supported(d_type) && tq_supported(up_type)) {
+            if (up_type != gu_type) {
+                err = "trellis experts: gate and up of different trellis types on one layer";
+                return false;
+            }
+            if (n_embd % 128 || n_ff % 128 || n_embd > kTqMaxN || n_ff > kTqMaxN) {
+                err = "trellis experts: expert widths are not whole 128-weight blocks within 4096";
+                return false;
+            }
+            f.gu_type = gu_type;
+            f.d_type = d_type;
+            f.gu_act = GGML_TYPE_Q8_0;
+            f.d_act = GGML_TYPE_Q8_0;
+            f.n_embd = n_embd;
+            f.n_ff = n_ff;
+            f.swiglu_limit = swiglu_limit;
+            f.up_type = gu_type;
+            f.gu_row = weight_geometry(gu_type, n_embd);
+            f.up_row = f.gu_row;
+            f.d_row = weight_geometry(d_type, n_ff);
+            f.up_off = f.gu_row * (size_t) n_ff;
+            f.down_off = f.up_off + f.gu_row * (size_t) n_ff;
+            f.bytes = f.down_off + f.d_row * (size_t) n_embd;
+            f.tail = 0;
+            f.act_bytes = ggml_row_size(GGML_TYPE_Q8_0, n_embd);
+            f.h_bytes = ggml_row_size(GGML_TYPE_Q8_0, n_ff);
+            if (f.act_bytes > kNativeActBytes || f.h_bytes > kNativeHBytes) {
+                err = "trellis experts: activation larger than the pool's buffers";
+                return false;
+            }
+            return true;
+        }
+        err = "trellis experts: the layer mixes a trellis type with a format this engine has no trellis pair for";
+        return false;
+    }
     const ggml_type_traits_cpu* tg = traits(gu_type);
     const ggml_type_traits_cpu* tu = traits(up_type);
     const ggml_type_traits_cpu* td = traits(d_type);
@@ -137,6 +200,12 @@ bool native_fmt(int gu_type, int d_type, int64_t n_embd, int64_t n_ff, NativeFmt
 
 void native_quant_act(const NativeFmt& f, const float* x, void* dst) {
     static const bool avx512 = cpu_avx512_ok();
+    if (f.had_block > 0 && f.had_gu) {   // Hadamard-folded gate/up: rotate x before quantizing it
+        thread_local float rot[kNativeActBytes];   // n_embd floats (2560 at most here)
+        std::memcpy(rot, x, (size_t) f.n_embd * sizeof(float));
+        hadamard_rotate(rot, (int) f.n_embd, f.had_block, f.gu_signs);
+        x = rot;
+    }
     if (f.gu_act == GGML_TYPE_Q8_K) {   // ggml's reference quantizer is scalar
         if (avx512) {
             quantize_q8_K_avx512(x, dst, f.n_embd);
@@ -149,6 +218,12 @@ void native_quant_act(const NativeFmt& f, const float* x, void* dst) {
 }
 
 void native_quant_h(const NativeFmt& f, const float* h, void* dst) {
+    if (f.had_block > 0 && f.had_d) {   // Hadamard-folded down: rotate h before quantizing it
+        thread_local float rot[kNativeMaxFF];
+        std::memcpy(rot, h, (size_t) f.n_ff * sizeof(float));
+        hadamard_rotate(rot, (int) f.n_ff, f.had_block, f.d_signs);
+        h = rot;
+    }
     traits(f.d_act)->from_float(h, dst, f.n_ff);
 }
 
@@ -161,6 +236,14 @@ void native_gu_rows(const NativeFmt& f, const uint8_t* blob, const void* const* 
     static const bool avx512 = cpu_avx512_ok();
     static const bool avx2 = cpu_avx2_ok();
     static const bool cpu512 = avx512;
+    if (tq_supported(f.gu_type)) {   // the trellis rows; the fold is applied to the activation by native_quant_act
+        const TqIsa isa = tq_isa();
+        for (int t0 = 0; t0 < nt; t0 += kTqMaxTokens) {
+            const int m = nt - t0 < kTqMaxTokens ? nt - t0 : kTqMaxTokens;
+            tq_gu_rows(isa, f.gu_type, blob, f.gu_row, f.up_off, (int) f.n_embd, act + t0, m, ff + t0, r0, r1);
+        }
+        return;
+    }
     if (f.up_type != f.gu_type) {   // gate and up of two types: each half on its type's row kernel
         if (f.swiglu_limit <= 0.f && f.tail == 0) {
             if (avx512 && iq512_supported(f.gu_type) && iq512_supported(f.up_type)) {
@@ -218,6 +301,14 @@ void native_gu_rows(const NativeFmt& f, const uint8_t* blob, const void* const* 
 
 void native_down_rows(const NativeFmt& f, const uint8_t* blob, const void* const* hq, int nt, float* const* out,
                       int r0, int r1) {
+    if (tq_supported(f.d_type)) {   // the trellis rows; the fold is applied to the activation by native_quant_h
+        const TqIsa isa = tq_isa();
+        for (int t0 = 0; t0 < nt; t0 += kTqMaxTokens) {
+            const int m = nt - t0 < kTqMaxTokens ? nt - t0 : kTqMaxTokens;
+            tq_rows(isa, f.d_type, blob + f.down_off, f.d_row, (int) f.n_ff, hq + t0, m, out + t0, r0, r1);
+        }
+        return;
+    }
     // IQ4_NL down rows: the AVX-2 multi-token kernel decodes the nibbles once per block instead of once per token;
     // the ggml dot is single-token.
     if (cpu_avx2_ok() && f.d_type == 20 && iq4nl256_fits((int) f.n_ff)) {   // the same rule as the gate/up rows

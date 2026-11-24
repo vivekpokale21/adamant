@@ -43,7 +43,15 @@ enum ggml_type {
     GGML_TYPE_IQ1_M = 29,
     GGML_TYPE_NVFP4 = 40,
     GGML_TYPE_Q2_0 = 42,
-    GGML_TYPE_COUNT = 43,
+    // The APR (trellis) expert formats of Agention's llama.cpp fork (ggml_common_tq.h).  The engine has no ggml dot
+    // product for them: their rows run on kernels/cpu/tq_cpu.cpp, and their geometry on artifact/gguf_reader.hpp.
+    GGML_TYPE_TQ2_T = 144,
+    GGML_TYPE_TQK6 = 145,
+    GGML_TYPE_TQK7 = 146,
+    GGML_TYPE_TQP5 = 147,
+    GGML_TYPE_TQP6 = 148,
+    GGML_TYPE_TQP7 = 149,
+    GGML_TYPE_COUNT = 150,
 };
 
 typedef uint16_t ggml_fp16_t;
