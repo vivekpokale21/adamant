@@ -28,6 +28,8 @@ bool Prefill::Run::Chunk::Experts::Group::compute_fp16(size_t j, const uint8_t* 
     const int64_t o0 = m.off[(size_t) e], ne = m.cnt[(size_t) e];
     m.gemm.f16(m.Xs + o0 * N, m.dq_gu[q], m.GU + o0 * 1280, ne, 1280, N);
     swiglu_interleaved(m.GU + o0 * 1280, m.Hh + o0 * 640, ne, m.cs);
+    if (lay.native && lay.fmt[(size_t) l].had_d)   // folded down weights take H (s * h)
+        basalt::kernels::hadamard_rows_f16(m.Hh + o0 * 640, ne, 640, lay.fmt[(size_t) l].had_block, m.had_sh[(size_t) l], m.cs);
     m.gemm.f16(m.Hh + o0 * 640, m.dq_d[q], m.Dm + o0 * N, ne, N, 640);
     return true;
 }
