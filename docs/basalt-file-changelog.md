@@ -22,6 +22,13 @@ download or any re-quantizing.
   and IQ2_XXS up on one layer) gives the up type as a sixth column under an `# experts v7` header. The converter writes v7
   only for such a model; every other pack keeps v5 (GGUF) or v6 (NVFP4). An engine from before v7 refuses a v7 pack and asks
   for an update.
+- **`experts.layout` v8, no version change:** a model whose experts are Hadamard-folded writes the fold as an
+  `experts.hadamard` section and headers the layout `# experts v8`, which carries the fold and the up type column together.
+  A v8 layout with no section (or the section with an older layout) is refused at start, as is a fold on a v7 layout or on a
+  non-trellis expert type - those kernels quantize an unrotated input. The converter writes v8 only for a model that
+  declares `prism.hadamard.*`; every other pack keeps v5 (GGUF) or v6 (NVFP4).
+- **Trellis expert types:** the APR formats (ggml ids 144-149) may appear in the `experts` section only. A dense tensor of
+  one of them is refused at load ([trellis](trellis.md)).
 - **Trimmed `meta`:** no `sampling` (the server reads the GGUF metadata's `general.sampling.*` keys), no `profile` or
   `hc8` records and no converter revision, provenance that changed whenever a section was replaced.
 

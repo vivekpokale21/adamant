@@ -19,6 +19,12 @@
 - **`experts.layout` v7，版本号不变：** 某一层的 gate 与 up 行类型不同（Unsloth 的 UD-IQ1_S：其中一层 gate 是 IQ2_S、
   up 是 IQ2_XXS）时，会在 `# experts v7` 头部下把 up 的类型作为第六列给出。转换器只为这样的模型写 v7；其他 pack
   仍是 v5（GGUF）或 v6（NVFP4）。早于 v7 的引擎会拒绝 v7 pack 并要求更新。
+- **`experts.layout` v8，版本号不变：** 专家被 Hadamard 折叠的模型会把折叠写成 `experts.hadamard` section，并把布局
+  头写成 `# experts v8`，它同时承载折叠与 up 类型列。v8 布局没有该 section（或该 section 配旧布局）在启动时被拒绝，
+  在 v7 布局上折叠、或在非 trellis 专家类型上折叠也会被拒绝——那些 kernel 量化的是未旋转的输入。转换器只为声明了
+  `prism.hadamard.*` 的模型写 v8；其他 pack 仍是 v5（GGUF）或 v6（NVFP4）。
+- **trellis 专家类型：** APR 格式（ggml 编号 144-149）只能出现在 `experts` section。稠密张量使用它们会在加载时被
+  拒绝（[trellis](trellis.md)）。
 - **精简 `meta`：** 不再有 `sampling`（服务器读取 GGUF 元数据的 `general.sampling.*` 键）、不再有 `profile` 或
   `hc8` 记录，也没有转换器版本号——每次替换某个 section 时这些溯源信息都会变化。
 
