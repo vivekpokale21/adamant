@@ -76,9 +76,8 @@ the same signs are uploaded once per host vector by `hadamard_device_signs`, and
   (`dequant_f16` on the card, `tq_dequant_row` on CPU).  The FP16 dequantizer is bit-checked against the CPU decode.
 - **the peer card**: the peer's persistent kernel quantizes an unrotated activation, so folded layers stay off it.
 - **the device-planned MoE tail**: it quantizes the layer's hidden state without the fold, so folded layers stay off
-  it (`dec_moe_formats_ok` returns false for the trellis types).
-- **`--device-plan` off**: a folded pack with the device plan off is refused at load, because the expert inputs
-  reaching the kernels would not be rotated.
+  it (`dec_moe_formats_ok` returns false for the trellis types).  `dm_init` turns the tail off for a pack whose layers
+  are folded and says why; the experts then run through the grouped kernels, which rotate.
 
 ## Where the kernels live
 

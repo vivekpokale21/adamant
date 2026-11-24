@@ -69,8 +69,7 @@ CPU 与 GPU 对同一字节、同一量化激活的点积逐位相同 —— 这
   CPU 用 `tq_dequant_row`)。FP16 反量化器与 CPU 解码逐位对照。
 - **peer 卡**:peer 的常驻 kernel 量化的是未折叠的激活,所以折叠层不上 peer。
 - **设备规划的 MoE 尾段**:它对该层隐状态量化时不做折叠,所以折叠层不上尾段(`dec_moe_formats_ok` 对 trellis 类型
-  返回 false)。
-- **`--device-plan` 关闭**:折叠的包在 device plan 关闭时加载被拒绝,因为到达 kernel 的专家输入没有被折叠。
+  返回 false)。`dm_init` 会在折叠的包上关掉尾段并说明原因,专家随后走 grouped kernel,由它做折叠。
 
 ## kernel 在哪里
 
