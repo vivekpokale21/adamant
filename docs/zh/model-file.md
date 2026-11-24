@@ -28,7 +28,7 @@ python3 tools/convert/convert.py --gguf MODEL-00001-of-0000N.gguf --mmproj MMPRO
 
 ## Trellis（APR）pack
 
-Agention 的 APR GGUF 把路由专家存成 trellis 编码的权重（ggml 类型 `TQ2_T`、`TQK6`、`TQK7`、`TQP5`、`TQP6`、`TQP7`，编号 144-149）：一个 block 是 128 个权重、一个 fp16 scale，加上 trellis 步骤组成的环形位流；每个步骤的状态经哈希映射到 2048 点 fp16 codebook 中的一个或两个点。它们和其他专家格式一样逐字节搬进 pack，CPU 上的行计算走引擎自己的 kernel（[tq_cpu.hpp](../../include/basalt/kernels/cpu/tq_cpu.hpp)），激活为 Q8_0。
+Agention 的 APR GGUF 把路由专家存成 trellis 编码的权重（ggml 类型 `TQ2_T`、`TQK6`、`TQK7`、`TQP5`、`TQP6`、`TQP7`，编号 144-149）：一个 block 是 128 个权重、一个 fp16 scale，加上 trellis 步骤组成的环形位流；每个步骤的状态经哈希映射到 2048 点 fp16 codebook 中的一个或两个点。它们和其他专家格式一样逐字节搬进 pack，CPU 上的行计算走引擎自己的 kernel（[tq_cpu.hpp](../../include/basalt/kernels/cpu/tq_cpu.hpp)），激活为 Q8_0。格式、codebook 与折叠见 [trellis](trellis.md)。
 
 `Gyro` GGUF 还会折叠它的专家：存下的权重是每 `b` 个输入列一组的 `W diag(s) H_b^T`，所以进入被折叠权重的激活必须先经过 `y = H_b (s · x)`。`convert.py` 读取 `prism.hadamard.*` 元数据，写成 `experts.hadamard` section，并把 `experts.layout` 写成 v8；v8 布局没有该 section（或反过来）会在启动时被拒绝，在非 trellis 类型上折叠也会被拒绝，因为那些 kernel 量化的是未旋转的输入。折叠按层生效，所以被折叠的层 gate 与 up 必须同类型。
 

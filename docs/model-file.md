@@ -40,8 +40,9 @@ and is refused as cut short otherwise; the shards of a split model are still che
 
 Agention's APR GGUFs store their routed experts as trellis-coded weights (the ggml types `TQ2_T`, `TQK6`, `TQK7`,
 `TQP5`, `TQP6`, `TQP7`, ids 144-149): one block is 128 weights, an fp16 scale and a circular bit stream of trellis
-steps, and each step's state hashes to one or two points of a 2048-point fp16 codebook. They are copied into a pack
-byte for byte, like every other expert format, and their rows on the CPU run on the engine's own kernels
+steps, and each step's state hashes to one or two points of a 2048-point fp16 codebook.  The formats, the codebook and
+the fold are described in [trellis](trellis.md).  They are copied into a pack byte for byte, like every other expert
+format, and their rows on the CPU run on the engine's own kernels
 ([tq_cpu.hpp](../include/basalt/kernels/cpu/tq_cpu.hpp)) against Q8_0 activations.
 
 A `Gyro` GGUF also folds its experts: the stored weight is `W diag(s) H_b^T` per block of `b` input columns, so an
