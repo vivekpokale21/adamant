@@ -64,7 +64,7 @@ CPU 与 GPU 对同一字节、同一量化激活的点积逐位相同 —— 这
 - **带 SwiGLU 上限的折叠层**:加载时拒绝。融合的 kernel 在 SwiGLU 之后才折叠,上限会落在错误的数值上 —— 未折叠的
   kernel 必须先折叠再截断,那是另一个函数。
 - **宽度不被块整除的折叠层**:拒绝(`prism.hadamard.block_size` 必须整除行宽)。
-- **trellis 类型的稠密张量**:拒绝,同其他仅限专家的格式。
+- **trellis 类型的稠密张量**:包在加载时拒绝（`register_gguf_view`）,同其他仅限专家的格式一样。
 - **MMQ**:`mmq::supported` 对 trellis 类型返回否,因此 prompt 分块走 FP16 路径读取它们(卡上用 `dequant_f16`,
   CPU 用 `tq_dequant_row`)。FP16 反量化器与 CPU 解码逐位对照。
 - **peer 卡**:peer 的常驻 kernel 量化的是未折叠的激活,所以折叠层不上 peer。

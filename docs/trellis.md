@@ -71,7 +71,7 @@ the same signs are uploaded once per host vector by `hadamard_device_signs`, and
 - **a folded layer with a SwiGLU limit**: refused at load.  The fused kernel rotates after SwiGLU, so the limit would
   land on the wrong values - the unrotated kernel would have to rotate first, which is a different function.
 - **a folded layer whose widths are not the block**: refused (`prism.hadamard.block_size` must divide the row widths).
-- **a dense tensor in a trellis type**: refused, as other expert-only types.
+- **a dense tensor in a trellis type**: the pack refuses it at load (`register_gguf_view`), as every expert-only format does.
 - **MMQ**: `mmq::supported` says no for the trellis types, so a prompt chunk reads them through the FP16 path
   (`dequant_f16` on the card, `tq_dequant_row` on CPU).  The FP16 dequantizer is bit-checked against the CPU decode.
 - **the peer card**: the peer's persistent kernel quantizes an unrotated activation, so folded layers stay off it.
