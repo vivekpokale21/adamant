@@ -114,6 +114,7 @@ bin/basalt serve MODEL.basalt [--python PY] [options]
 | `vram-segment-mib` | engine | MiB，至少 64 | 512 | 仅 Flash-Next。`vram-elastic` 的段大小。 |
 | `expert-cache` | engine | `auto` 或数量 | `auto` | 保留在 VRAM 中的专家块数。`auto` 取权重、会话和保留量之后能装下的部分。 |
 | `ram-reserve-mib` | engine | MiB | 2048 | 留给系统其余部分的空闲 RAM。专家层取引擎自身主机缓冲之上的部分，服务的 RAM 守卫守住它。`0` 不保留任何东西并关闭守卫。[内存下限](../running.md#内存下限) |
+| `file-cache-floor-mib` | engine | MiB | 4096 | 当专家仍从文件读取时，在 `ram-reserve-mib` 之外留给操作系统文件缓存的 RAM。调低它能固定更多专家；两层的文件份额加一个提示词 chunk 的读取量仍然高于它。`0` 不保留任何东西。[内存下限](../running.md#内存下限) |
 | `adapt-every` | engine | 窗口数 | 服务器上 1，层拆分时 4（`0` 关闭） | 仅 Flash-Next。每 N 个窗口做一次自适应轮。[自适应层](adaptive.md) |
 | `adapt-swaps` | engine | 整数 | 96（`0` 关闭） | 仅 Flash-Next。一轮最多换入主 GPU 的专家数。[自适应层](adaptive.md) |
 | `peer-adapt-swaps` | engine | 整数 | `adapt-swaps` | 仅 Flash-Next。一轮最多换入对等卡的专家数。 |

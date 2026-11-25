@@ -6,6 +6,7 @@
 #pragma once
 
 #include "basalt/core/load_progress.hpp"
+#include "basalt/platform/memory.hpp"
 
 #include <cstdint>
 #include <functional>
@@ -121,18 +122,20 @@ struct FileCache {
     uint64_t prompt_file_bytes = 0;
 };
 
-/// The least RAM left to the OS file cache while any expert is read from the file.
-inline constexpr uint64_t kMinFileCacheBytes = 4ull << 30;
+/// The least RAM left to the OS file cache while any expert is read from the file, as a run starts with
+/// (platform::file_cache_floor_min, which --file-cache-floor-mib lowers).
+inline constexpr uint64_t kMinFileCacheBytes = basalt::platform::kDefaultFileCacheFloorBytes;
 
 /// The file cache's floor while `file_bytes` of `want_bytes` experts are read from the file: one prompt chunk's reads
-/// and the file-held share of two layers (the one computed and the one read ahead), at least kMinFileCacheBytes; 0
-/// when nothing is read from the file.  Pages evicted before their layer is over are read again at drive speed, and
-/// with swap the reclaim moves the rest of the system out instead.
+/// and the file-held share of two layers (the one computed and the one read ahead), at least the minimum in force
+/// (platform::file_cache_floor_min); 0 when nothing is read from the file.  Pages evicted before their layer is over
+/// are read again at drive speed, and with swap the reclaim moves the rest of the system out instead.
 inline uint64_t file_cache_floor(uint64_t file_bytes, uint64_t want_bytes, const FileCache& c) {
     if (file_bytes == 0) return 0;
     const double share = want_bytes > file_bytes ? (double) file_bytes / (double) want_bytes : 1.0;
     const uint64_t pass = c.prompt_file_bytes + 2 * ((uint64_t) ((double) c.layer_bytes * share) + 1);
-    return pass > kMinFileCacheBytes ? pass : kMinFileCacheBytes;
+    const uint64_t min = basalt::platform::file_cache_floor_min();
+    return pass > min ? pass : min;
 }
 
 /// The RAM a tier sized by ram_tier_room(avail, reserve, pinned) also leaves free, toward `want_bytes` of experts: 0

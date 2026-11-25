@@ -175,11 +175,16 @@ uint64_t available_memory() { return meminfo_bytes("MemAvailable"); }
 
 namespace {
 std::atomic<uint64_t> g_ram_reserve{kDefaultRamReserveBytes};
+std::atomic<uint64_t> g_file_cache_floor_min{kDefaultFileCacheFloorBytes};
 }  // namespace
 
 uint64_t ram_reserve() { return g_ram_reserve.load(); }
 
 void set_ram_reserve(uint64_t bytes) { g_ram_reserve = bytes; }
+
+uint64_t file_cache_floor_min() { return g_file_cache_floor_min.load(); }
+
+void set_file_cache_floor_min(uint64_t bytes) { g_file_cache_floor_min = bytes; }
 
 uint64_t ram_budget(bool* known) {
     const uint64_t avail = available_memory();

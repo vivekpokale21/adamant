@@ -89,7 +89,8 @@ std::optional<int> parse_options(int argc, char** argv, CommonOptions& o, const 
         else if (a == "--conversation-cache-dir") o.conversation_cache_dir = next("--conversation-cache-dir");
         else if (a == "--conversation-cache-mib" || a == "--conversation-cache-slots" ||
                  a == "--conversation-cache-min-free-mib" || a == "--conversation-cache-disk-mib" ||
-                 a == "--conversation-cache-min-tokens" || a == "--ram-reserve-mib") {
+                 a == "--conversation-cache-min-tokens" || a == "--ram-reserve-mib" ||
+                 a == "--file-cache-floor-mib") {
             const std::string value = next(a.c_str());
             int64_t number = 0;
             const auto result = std::from_chars(value.data(), value.data() + value.size(), number);
@@ -104,6 +105,7 @@ std::optional<int> parse_options(int argc, char** argv, CommonOptions& o, const 
             else if (a == "--conversation-cache-disk-mib") o.conversation_cache_disk_mib = number;
             else if (a == "--conversation-cache-min-tokens") o.conversation_cache_min_tokens = (int) number;
             else if (a == "--ram-reserve-mib") o.ram_reserve_mib = number;
+            else if (a == "--file-cache-floor-mib") o.file_cache_floor_mib = number;
             else o.conversation_cache_slots = (int) number;
         }
         else if (a == "--prompt-cache-root") o.prompt_cache_root = std::max(0LL, std::atoll(next("--prompt-cache-root")));
@@ -139,6 +141,10 @@ std::optional<int> parse_options(int argc, char** argv, CommonOptions& o, const 
     basalt::platform::set_ram_reserve((uint64_t) o.ram_reserve_mib << 20);
     if (o.serve && o.ram_reserve_mib == 0 && !o.gpu_plan)
         basalt::log::warn("basalt", "RAM guard off (--ram-reserve-mib 0): low RAM can stop the engine or the machine");
+    basalt::platform::set_file_cache_floor_min((uint64_t) o.file_cache_floor_mib << 20);
+    if (o.file_cache_floor_mib == 0 && !o.gpu_plan)
+        basalt::log::warn("basalt", "file cache floor off (--file-cache-floor-mib 0): experts read from the file can be "
+                                    "read again at drive speed, and the reclaim can move the rest of the system out");
     if (adapter != nullptr) return adapter->finish_flags(o);
     return std::nullopt;
 }

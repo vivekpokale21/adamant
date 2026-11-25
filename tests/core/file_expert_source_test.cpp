@@ -295,6 +295,8 @@ void test_file_cache_keep() {
     using basalt::core::file_cache_keep;
     using basalt::core::kMinFileCacheBytes;
     using basalt::core::ram_tier_room;
+    using basalt::platform::file_cache_floor_min;
+    using basalt::platform::set_file_cache_floor_min;
     constexpr uint64_t kGiB = 1ull << 30;
     const FileCache flash{(uint64_t) (1.6 * kGiB), 3584ull << 20};   // a layer's experts, one prompt chunk's reads
     const uint64_t avail = 55 * kGiB, reserve = 2 * kGiB, want = 67 * kGiB;
@@ -312,6 +314,17 @@ void test_file_cache_keep() {
             "the file cache keeps at least its minimum");
     // everything in the file (no RAM above the reserve): the whole largest layer twice and a chunk
     require(file_cache_floor(want, want, FileCache{4 * kGiB, kGiB}) == 9 * kGiB + 2, "two whole layers and a chunk");
+    // --file-cache-floor-mib lowers the minimum (platform::file_cache_floor_min): the tier keeps less for the cache
+    // and pins more experts, and a real pass still rules above the lowered minimum
+    set_file_cache_floor_min(2 * kGiB);
+    require(file_cache_floor_min() == 2 * kGiB, "the minimum is the one in force");
+    require(file_cache_keep(avail, reserve, false, want, FileCache{kGiB / 4, 0}) == 2 * kGiB,
+            "a lowered minimum keeps less for the file cache");
+    require(file_cache_floor(want, want, flash) == flash.prompt_file_bytes + 2 * ((uint64_t) (1.6 * kGiB) + 1),
+            "a lowered minimum cannot cut a real pass");
+    set_file_cache_floor_min(kMinFileCacheBytes);   // back to the default for whatever runs next
+    require(file_cache_keep(avail, reserve, false, want, FileCache{kGiB / 4, 0}) == kMinFileCacheBytes,
+            "restoring the default keeps its minimum");
 }
 
 void test_ram_tier_room() {

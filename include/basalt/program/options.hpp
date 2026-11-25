@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "basalt/core/ram_load.hpp"
 #include "basalt/kernels/cpu/pool.hpp"
 #include "basalt/platform/memory.hpp"
 
@@ -70,6 +71,9 @@ struct CommonOptions {
     bool stop_eos = false;
     /// --ram-reserve-mib: the RAM left free for the rest of the system (platform::ram_reserve); 0 turns the guard off.
     int64_t ram_reserve_mib = (int64_t) (basalt::platform::kDefaultRamReserveBytes >> 20);
+    /// --file-cache-floor-mib: the least RAM the OS file cache keeps while experts are still read from the file
+    /// (core::file_cache_floor_min), beside --ram-reserve-mib; 0 keeps nothing.
+    int64_t file_cache_floor_mib = (int64_t) (basalt::core::kMinFileCacheBytes >> 20);
     std::vector<int64_t> eos_ids;
     /// --gpu: the cards this run uses (gpu_select.hpp); empty = GPU 0 alone.  --gpu-plan prints the choice and exits.
     std::string gpu;

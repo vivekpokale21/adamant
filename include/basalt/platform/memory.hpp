@@ -73,6 +73,13 @@ uint64_t ram_reserve();
 void set_ram_reserve(uint64_t bytes);
 inline constexpr uint64_t kDefaultRamReserveBytes = 2ull << 30;
 
+/// The least RAM the OS file cache keeps beside the reserve while experts are still read from the file
+/// (--file-cache-floor-mib): core's `file_cache_floor` clamps to it, so a smaller figure pins more experts and leaves
+/// fewer pages for the ones on the SSD.  0: nothing is kept.
+uint64_t file_cache_floor_min();
+void set_file_cache_floor_min(uint64_t bytes);
+inline constexpr uint64_t kDefaultFileCacheFloorBytes = 4ull << 30;
+
 /// The expert bytes one prompt chunk may read from the expert file for the slots it borrows from the GPU cache (the
 /// chunk is sized to stay within it).
 inline constexpr uint64_t kPromptFileReadBytes = 3584ull << 20;
