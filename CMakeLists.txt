@@ -1188,7 +1188,7 @@ endif()
 
 add_library(kernels_cpu STATIC src/kernels/cpu/expert.cpp src/kernels/cpu/pool.cpp
             src/kernels/cpu/cpu_quota.cpp src/kernels/cpu/expert_layout.cpp src/kernels/cpu/q2_avx2.cpp
-            src/kernels/cpu/q2_avx2_vnni.cpp)
+            src/kernels/cpu/q2_avx2_vnni.cpp src/kernels/cpu/hadamard.cpp)
 target_include_directories(kernels_cpu PUBLIC include)
 # only the kernel files get the AVX-512 / AVX2 flags; the pool and the probe run on any x86-64,
 # and the engine picks the kernels at run time (cpu_avx512_ok).
@@ -1232,7 +1232,13 @@ target_sources(kernels_cpu PRIVATE src/kernels/cpu/native_expert.cpp src/kernels
                                          src/kernels/cpu/iq_avx2.cpp src/kernels/cpu/iq_avx2_vnni.cpp
                                          src/kernels/cpu/kq_avx2.cpp
                                          src/kernels/cpu/kq_avx1.cpp src/kernels/cpu/ggml/ggml_cpu_dispatch.cpp
+                                         src/kernels/cpu/tq_cpu.cpp src/kernels/cpu/tq_avx2.cpp
+                                         src/kernels/cpu/tq_avx512.cpp
                                          $<TARGET_OBJECTS:ggml_dots_avx2> $<TARGET_OBJECTS:ggml_dots_avx512>)
+# the APR trellis rows (tq_cpu.hpp): tq_cpu.cpp runs on any x86-64 and picks one of the two kernels at run time,
+# so only the kernel files carry the instruction-set flags
+set_source_files_properties(src/kernels/cpu/tq_avx2.cpp PROPERTIES COMPILE_OPTIONS "${_isa_avx2_flags}")
+set_source_files_properties(src/kernels/cpu/tq_avx512.cpp PROPERTIES COMPILE_OPTIONS "${_isa_avx512_flags}")
 # the i-quant rows also use BMI2 (pdep/pext for the sign masks; cpu_avx512_ok requires it). MSVC compiles the
 # intrinsics without a switch.
 if(MSVC)
@@ -1368,6 +1374,18 @@ target_link_libraries(native_expert_parity PRIVATE kernels kernels_cpu artifact 
 add_executable(native_expert_bench tests/kernels/native_expert_bench.cpp)
 target_include_directories(native_expert_bench PRIVATE ${_gpu_include_directories})
 target_link_libraries(native_expert_bench PRIVATE kernels kernels_cpu artifact ${_gpu_runtime_target})
+# the APR trellis experts (TQ2_T .. TQP7) and their Hadamard fold: a double reference, the CPU tier bit for bit per
+# ISA, the grouped GPU kernels against it, the fused rotation against the two kernels, the FP16 dequantizer against
+# the CPU decode, and the paths trellis deliberately does not take (GPU, synthetic, no model; --bench times the
+# grouped kernels, --cpu-bench times the CPU rows per ISA, --refusals checks the refusals without a card)
+add_executable(tq_expert_parity tests/kernels/tq_expert_parity.cpp)
+target_include_directories(tq_expert_parity PRIVATE ${_gpu_include_directories})
+target_link_libraries(tq_expert_parity PRIVATE kernels kernels_cpu mmq ${_gpu_runtime_target})
+basalt_gpu_test(NAME tq_expert_parity COMMAND tq_expert_parity)
+set_tests_properties(tq_expert_parity PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 180)
+basalt_cpu_test(NAME tq_expert_refusals COMMAND tq_expert_parity --refusals)
+basalt_cpu_test(NAME tq_expert_cpu_bench COMMAND tq_expert_parity --cpu-bench)
+set_tests_properties(tq_expert_cpu_bench PROPERTIES TIMEOUT 300)
 # IQ1_S and the limited-SwiGLU expert pairs at the engine's expert geometry, GPU and CPU tiers against a double reference
 add_executable(iq1s_parity tests/kernels/iq1s_parity.cpp)
 target_include_directories(iq1s_parity PRIVATE ${_gpu_include_directories} ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -1470,6 +1488,15 @@ if(BUILD_TESTING)
   target_link_libraries(iq_avx512_test PRIVATE kernels_cpu platform)
   basalt_cpu_test(NAME iq_avx512_test COMMAND iq_avx512_test)
   set_property(TEST iq_avx512_test APPEND PROPERTY LABELS avx512)
+
+  # the APR trellis rows: the format decoded from its documented text, every ISA bitwise, and a double reference
+  add_executable(tq_cpu_test tests/kernels/cpu/tq_cpu_test.cpp)
+  target_link_libraries(tq_cpu_test PRIVATE kernels_cpu)
+  basalt_cpu_test(NAME tq_cpu_test COMMAND tq_cpu_test)
+  # the activation-side Hadamard rotation of a folded pack: the section, the transform, and the quantizers that apply it
+  add_executable(hadamard_test tests/kernels/cpu/hadamard_test.cpp)
+  target_link_libraries(hadamard_test PRIVATE kernels_cpu)
+  basalt_cpu_test(NAME hadamard_test COMMAND hadamard_test)
 
   # DirectFile has a Linux backend and a Windows backend, and this test covers those two; macOS is not a platform
   # the engine builds for.

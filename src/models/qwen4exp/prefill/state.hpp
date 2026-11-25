@@ -35,6 +35,9 @@ struct Prefill::Impl {
     cudaStream_t cs = nullptr, copy = nullptr;
     Gemm gemm;
     std::vector<void*> owned;
+    /// Hadamard-folded experts: per layer, this device's gate/up (n_embd) and down (n_ff) sign vectors, resolved in
+    /// init so a prompt chunk reads a pointer (nullptr when the layer is not folded).
+    std::vector<const float*> had_sx, had_sh;
     // chunk buffers
     float *emb = nullptr, *R = nullptr, *xn = nullptr, *lo = nullptr, *gated = nullptr, *inj = nullptr;
     float* grs = nullptr;                    // the hyper-connection read's row scales (T x 4)

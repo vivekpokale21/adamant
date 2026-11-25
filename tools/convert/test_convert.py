@@ -669,5 +669,74 @@ class Q6KRequantTest(unittest.TestCase):
             self.assertLess(np.sqrt(((deq - a) ** 2).mean()), 0.03 * a.std())
 
 
+class HadamardTest(unittest.TestCase):
+    """prism.hadamard -> the experts.hadamard section; anything the engine cannot rotate is refused."""
+    N_EMBD, N_FF = 256, 128
+
+    def meta(self, **kw):
+        names = ["blk.%d.ffn_%s_exps.weight" % (l, r) for l in range(2) for r in ("gate", "up", "down")]
+        m = {"prism.hadamard.version": 1, "prism.hadamard.block_size": 128,
+             "prism.hadamard.transform": "normalized-sylvester-walsh-hadamard",
+             "prism.hadamard.axis": "input-last-dimension", "prism.hadamard.sign_mode": "explicit",
+             "prism.hadamard.weight_names": names,
+             "prism.hadamard.sign_widths": [self.N_FF, self.N_EMBD],
+             "prism.hadamard.sign_values": [1, -1] * (self.N_FF // 2) + [-1, 1] * (self.N_EMBD // 2)}
+        m.update(kw)
+        return m
+
+    def layout(self, gu=148, d=149, ut=None):
+        return [(l, gu, d, 0, 0, None, gu if ut is None else ut) for l in range(2)]
+
+    def test_no_metadata(self):
+        self.assertIsNone(S.hadamard_text({}, self.layout(), self.N_EMBD, self.N_FF))
+
+    def test_explicit_signs_written(self):
+        lines = S.hadamard_text(self.meta(), self.layout(), self.N_EMBD, self.N_FF).decode().splitlines()
+        self.assertTrue(lines[0].startswith("# basalt hadamard v1"))
+        self.assertEqual(lines[1], "block 128")
+        self.assertEqual(lines[2].split()[:4], ["signs", str(self.N_FF), "1", "-1"])
+        self.assertEqual(len(lines[3].split()), 2 + self.N_EMBD)
+        self.assertEqual(lines[4:], ["layer 0 1 1 1", "layer 1 1 1 1"])
+
+    def test_identity_signs(self):
+        text = S.hadamard_text(self.meta(**{"prism.hadamard.sign_mode": "identity"}),
+                               self.layout(), self.N_EMBD, self.N_FF).decode().splitlines()
+        self.assertEqual(text[1], "block 128")
+        self.assertEqual(text[2:], ["layer 0 1 1 1", "layer 1 1 1 1"])
+
+    def test_refusals(self):
+        bad = {
+            "transform": self.meta(**{"prism.hadamard.transform": "dct"}),
+            "dense weight": self.meta(**{"prism.hadamard.weight_names": ["blk.0.attn_q.weight"]}),
+            "inverse": self.meta(**{"prism.hadamard.inverse_weight_names": ["token_embd.weight"]}),
+            "gate only": self.meta(**{"prism.hadamard.weight_names": ["blk.0.ffn_gate_exps.weight"]}),
+            "missing width": self.meta(**{"prism.hadamard.sign_widths": [self.N_EMBD],
+                                          "prism.hadamard.sign_values": [1] * self.N_EMBD}),
+            "bad sign": self.meta(**{"prism.hadamard.sign_values": [2] * (self.N_FF + self.N_EMBD)}),
+            "block": self.meta(**{"prism.hadamard.block_size": 96}),
+        }
+        for what, m in bad.items():
+            with self.subTest(what):
+                with self.assertRaises(S.ConvertError):
+                    S.hadamard_text(m, self.layout(), self.N_EMBD, self.N_FF)
+        for gu, d in ((42, 149), (21, 149), (148, 20)):   # Q2_0, IQ3_S gate/up; IQ4_NL down
+            with self.assertRaisesRegex(S.ConvertError, "trellis types"):
+                S.hadamard_text(self.meta(), self.layout(gu=gu, d=d), self.N_EMBD, self.N_FF)
+        # a folded layer whose up rows have their own type: the rotation is per layer
+        with self.assertRaisesRegex(S.ConvertError, "rotation is per layer"):
+            S.hadamard_text(self.meta(), self.layout(gu=145, ut=148), self.N_EMBD, self.N_FF)
+
+    def test_folded_pack_is_layout_v8(self):
+        e = S.Experts.__new__(S.Experts)   # the layout text alone, no model
+        e.n_expert, e.total, e.hadamard = 2, 4, b"# basalt hadamard v1\nblock 128\n"
+        e.layout = [(l, 145, 146, l * 2 * 1049600, 1049600, None, 145) for l in range(2)]
+        head = e.layout_text().decode().splitlines()[0]
+        self.assertTrue(head.startswith("# experts v8:"), head)
+        self.assertIn("Hadamard-folded", head)
+        self.assertEqual(e.layout_text().decode().splitlines()[1], "0 145 146 0 1049600 145")
+        e.hadamard = None
+        self.assertTrue(e.layout_text().decode().startswith("# experts v5:"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -164,6 +164,37 @@ int main() {
         check(hc8_find(c.name, 3, 64) != nullptr && hc8_find(c.name, 3, 32) == nullptr && hc8_find("x", 3, 64) == nullptr,
               "hc8_find matches name and shape");
     }
+    std::printf("4. a trellis type outside the expert sections\n");
+    {
+        // trellis has no dense kernel: no ggml dot product, no MMQ tile, no MMVQ tile.  A dense tensor in one of the
+        // types is refused by the pack; the same type in an expert section is the format the experts are stored in.
+        const std::string dense_trellis =
+            R"({"format":"basalt","gguf_kv":{"general.architecture":"qwen4exp"},"tensors":{"proj.weight":)"
+            R"({"type":"TQK6","type_id":145,"shape":[2560,640],"bytes":1024,"offset":0}}})";
+        const std::string p1 = write_model(d.path / "dense_trellis.basalt", {{"meta", dense_trellis},
+                                                                             {"gguf", std::string(1024, '\0')}});
+        ModelFile f;
+        err.clear();
+        const bool opened = f.open(p1, err);
+        check(opened && f.load_meta(err), "open the dense trellis pack: " + err);
+        err.clear();
+        const bool refused = !f.register_gguf_view(err);
+        check(refused && err.find("trellis type in the dense pool") != std::string::npos,
+              "a trellis type in the dense pool is refused: " + err);
+        const std::string expert_trellis =
+            R"({"format":"basalt","gguf_kv":{"general.architecture":"qwen4exp"},"tensors":{"blk.0.experts.gate_up.weight":)"
+            R"({"type":"TQK6","type_id":145,"shape":[2560,1280],"bytes":1024,"offset":0,"section":"experts"}}})";
+        const std::string p2 = write_model(d.path / "expert_trellis.basalt", {{"meta", expert_trellis},
+                                                                             {"gguf", std::string(kTensorAlign, '\0')},
+                                                                             {"experts", std::string(1024, '\0')}});
+        ModelFile e;
+        err.clear();
+        const bool e_opened = e.open(p2, err);
+        check(e_opened && e.load_meta(err), "open the expert trellis pack: " + err);
+        err.clear();
+        const bool accepted = e.register_gguf_view(err);
+        check(accepted, "a trellis type in an expert section is accepted: " + err);
+    }
     std::printf("%s\n", g_fail ? "FAILED" : "all passed");
     return g_fail ? 1 : 0;
 }

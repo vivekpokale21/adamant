@@ -116,6 +116,7 @@ Command line `--name`; the Where column says which config block takes it.
 | `vram-segment-mib` | engine | MiB, at least 64 | 512 | Flash-Next only. Segment size for `vram-elastic`. |
 | `expert-cache` | engine | `auto` or a count | `auto` | Expert blobs kept in VRAM. `auto` takes what fits after weights, session and reserve. |
 | `ram-reserve-mib` | engine | MiB | 2048 | RAM left free for the rest of the system. The expert tiers take what is above it after the engine's own host buffers, and the serving RAM guard holds it. `0` keeps nothing and turns the guard off. [memory floors](../running.md#memory-floors) |
+| `file-cache-floor-mib` | engine | MiB | 4096 | RAM the OS file cache keeps beside `ram-reserve-mib` while experts are still read from the file. Lower it to pin more experts; the file's share of two layers and one prompt chunk's reads still rules above it. `0` keeps nothing. [memory floors](../running.md#memory-floors) |
 | `adapt-every` | engine | windows | 1 on a server, 4 with a layer split (`0` = off) | Flash-Next only. An adaptive round every N windows. [adaptive](adaptive.md) |
 | `adapt-swaps` | engine | integer | 96 (`0` = off) | Flash-Next only. Most experts one round swaps into the main GPU. [adaptive](adaptive.md) |
 | `peer-adapt-swaps` | engine | integer | `adapt-swaps` | Flash-Next only. Most experts one round swaps into the peer card. |

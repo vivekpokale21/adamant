@@ -10,4 +10,6 @@ Basalt on Blackwell; their setup and numbers are not Adamant results.
 Each model has one page for what it computes in and what each rounding costs. The method is shared.
 
 - [Qwen3.8-Flash-Next](qwen38-flash-next.md): stages, prefill, the measured costs, drafting and the lossy flags.
+- [Trellis (APR) experts](../trellis.md): the six trellis formats, the codebook each tier reads, and where the Hadamard
+  fold is applied.
 - [How quality is measured](quality.md): the gate, the BF16 reference, greedy identity and reproduction commands.

@@ -110,7 +110,7 @@ quant the measurements above used, and the recommended starting point on a
   [sampling](docs/configuration/sampling.md), [image sources](docs/configuration/image-sources.md),
   [diagnostics](docs/configuration/diagnostics.md), [basalt-probe](docs/probe.md), [platforms](docs/platforms.md).
 - **Models:** [models](docs/models/index.md), [Flash-Next](docs/models/qwen38-flash-next.md),
-  [the `.basalt` file](docs/model-file.md), [file format changes](docs/basalt-file-changelog.md).
+  [the `.basalt` file](docs/model-file.md), [trellis (APR) experts](docs/trellis.md), [file format changes](docs/basalt-file-changelog.md).
 - **Quality:** [precision](docs/precision/index.md), [method](docs/precision/quality.md).
 - **Build and develop:** [building](docs/building.md), [adding a model](docs/adding-a-model.md), [community runs](docs/community.md),
   [changelog](docs/changelog/index.md), [contributing](CONTRIBUTING.md).

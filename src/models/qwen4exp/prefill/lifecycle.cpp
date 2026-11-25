@@ -8,6 +8,7 @@
 #include "basalt/models/qwen4exp/prefill/gemm.hpp"
 #include "basalt/core/host_plan.hpp"
 #include "basalt/core/peer_experts.hpp"
+#include "basalt/kernels/iq_kernels.hpp"
 #include "basalt/log.hpp"
 #include <algorithm>
 #include <string>
@@ -65,6 +66,23 @@ bool Prefill::init(const core::WeightTable& wt, const core::ModelGeometry& g, co
         err = "prefill: geometry differs from the artifact's"; return false;
     }
     cudaGetDevice(&m.device);
+    {
+        // A Hadamard-folded layer rotates its gate/up input and its SwiGLU output before the fp16 products.  The
+        // device sign vectors are made here, at setup, and only for the fold the prompt path can apply: the
+        // experts' widths have to be the chunk's (the butterfly runs over a whole row).
+        const auto& lay = basalt::kernels::cpu::expert_layout();
+        m.had_sx.assign(lay.native ? lay.fmt.size() : 0, nullptr);
+        m.had_sh.assign(m.had_sx.size(), nullptr);
+        for (size_t l = 0; l < m.had_sx.size(); ++l) {
+            const auto& f = lay.fmt[l];
+            if ((f.had_gu || f.had_d) && (f.n_embd != N || f.n_ff != 640)) {
+                err = "prefill: layer " + std::to_string(l) + "'s folded experts are not " + std::to_string(N) + " x 640";
+                return false;
+            }
+            m.had_sx[l] = basalt::kernels::native_expert_gu_signs(f);
+            m.had_sh[l] = basalt::kernels::native_expert_layout(f).d_signs;
+        }
+    }
     if (stage_le_ < 0) stage_le_ = g.n_layers;
     if (stage_lb_ < 0 || stage_lb_ >= stage_le_ || stage_le_ > g.n_layers || (stage_le_ < g.n_layers) != (next_ != nullptr)) {
         err = "prefill: the stage's layer range is wrong";

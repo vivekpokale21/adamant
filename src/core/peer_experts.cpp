@@ -286,7 +286,7 @@ bool PeerExperts::launch(int64_t layer, const float* x, const int32_t* ids, int6
         return false;
     }
     const auto& f = lay.fmt[(size_t) layer];
-    const auto L = basalt::kernels::native_expert_layout(f.gu_type, f.d_type, f.n_embd, f.n_ff, f.swiglu_limit, f.up_type);
+    const auto L = basalt::kernels::native_expert_layout(f);
     return launch_layout(layer, L, x, ids, n_tok, k, kind, err, out);
 }
 
@@ -308,6 +308,12 @@ bool PeerExperts::launch_layout(int64_t layer, const kernels::NativeExpertLayout
     row_of_.clear();
     const int64_t n = n_tok * k;
     if (n > CAP) { err = "peer experts: window too large"; return false; }
+    if (L.had_block > 0) {
+        // the peer quantizes its activations with the plain q8_1 pass (with the plan copied in the same launch),
+        // which has no rotation: a folded layer's weights would be dotted against an input the peer never rotated
+        err = "peer experts: Hadamard-folded experts need the primary card";
+        return false;
+    }
     Meta& m = *(Meta*) h_meta_;
     int groups = 0, rows = 0;
     // distinct experts in routing order; each one's entries become compact rows

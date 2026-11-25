@@ -409,6 +409,13 @@ bool ModelFile::register_gguf_view(std::string& err) const {
             }
         }
         ti.offset = sec->offset + off->u64();
+        // the trellis types (144-149) have no dense kernel: no ggml dot product, no MMVQ tile, no MMQ tile.  A
+        // dense tensor in one of them has nothing that can read it, so the pack says so here rather than letting a
+        // NULL trait table decide at the first product.  Expert tensors live in another section.
+        if (sec == gg && ti.type >= 144 && ti.type <= 149) {
+            err = path_ + ": tensor " + name + " is a trellis type in the dense pool - trellis is an expert format";
+            return false;
+        }
         if (const Json* nb = t.get("bytes"))
             if (off->u64() > sec->bytes || nb->u64() > sec->bytes - off->u64()) {
                 err = path_ + ": tensor " + name + " runs past the end of its section";
@@ -427,6 +434,7 @@ void model_sources(const ModelFile& m, ModelSources& s) {
     s.dense_index = m.range("dense.index");
     s.experts = m.range("experts");
     s.experts_layout = m.range("experts.layout");
+    s.experts_hadamard = m.range("experts.hadamard");
     s.hc8 = m.range("hc8");
     s.mtp_dense = m.range("mtp/dense");
     s.mtp_dense_index = m.range("mtp/dense.index");

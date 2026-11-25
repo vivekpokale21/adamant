@@ -26,6 +26,8 @@ Flash-Next 在哪里舍入、每种舍入要付出多少代价。方法与参考
 |---|---|---|
 | 路由专家（GGUF pack） | 逐字节的 GGUF block；跨层混合类型，也可在一层内混合（UD-IQ1_S：IQ2_S gate、IQ2_XXS up） | q8_1 激活，dp4a 或 int8 mma，fp32 缩放因子 |
 | 路由专家（NVFP4） | NVIDIA 的 E2M1 码与 UE4M3 缩放因子，4.5 bit/权重；FP32 尾部 `{s_gate, s_up, s_down}` | q8_1 激活，每 16 值子块精确 int32，fp32 缩放因子；尾部在 fp32 中施加 |
+| 路由专家（APR trellis pack） | `TQ2_T`/`TQK6`/`TQK7`/`TQP5`/`TQP6`/`TQP7`（ggml 144-149），逐字节：128 个权重 = 一个 fp16 缩放因子加 trellis 步骤组成的环形位流；每个步骤的 15-bit 状态经哈希映射到 2048 点 fp16 codebook 中的一个或两个点 | CPU 池：Q8_0 激活，codebook 以 2^13 缩放的 int16 存储，每 32 个权重求和为精确 int32，四个 fp32 累加器按固定顺序相加 — 每个指令集、每种 token 分组都给出同样的位（[tq_cpu.hpp](../../include/basalt/kernels/cpu/tq_cpu.hpp)、`tq_cpu_test`） |
+| 路由专家，Hadamard 折叠（`Gyro` pack） | 存下的权重是每 `b` 个输入列一组的 `W diag(s) H_b^T`；`experts.hadamard` 记录旋转块、±1 符号向量与每层被折叠的角色 | 激活在量化前先旋转 `y = H_b (s · x)`，在 fp32 中完成（[hadamard.cpp](../../src/kernels/cpu/hadamard.cpp)）；v8 布局没有该 section，或在非 trellis 类型上折叠，都会在启动时被拒绝 |
 | 稠密投影（attention、GDN qkv/z/out、QSA） | Q8_0（NVFP4 pack 中是 Q6_K；其他 pack 中是 Q4_K/Q5_K/Q6_K） | q8_1 激活，int8 tensor-core 点积，每 32 块精确 int32 |
 | Router、GDN alpha/beta、indexer、PLE key/value | 按存储的 BF16 | fp32 激活与求和 |
 | 超连接 | int8 副本，每 32 个输入一个 fp16 缩放因子（`hc8`）；hc 读取使用 fp32 激活 | fp32 求和；up 积使用 fp16 高低位 mma |

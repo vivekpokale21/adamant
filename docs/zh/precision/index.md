@@ -9,4 +9,5 @@
 每个模型一页，说明它以什么精度计算、每种舍入要付出多少代价。方法是共用的。
 
 - [Qwen3.8-Flash-Next](qwen38-flash-next.md)：各阶段、prefill、实测成本、起草与有损标志。
+- [Trellis（APR）专家](../trellis.md)：六种 trellis 格式、两个档位各自读取的 codebook，以及折叠施加在哪里。
 - [质量如何测量](quality.md)：门槛、BF16 参考基准、贪心一致性与复现命令。

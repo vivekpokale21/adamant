@@ -31,6 +31,12 @@ bool Verifier::dm_init(std::string& err) {
     using namespace basalt::kernels;
     const ModelGeometry& g = *g_;
     const auto& lay = basalt::kernels::cpu::expert_layout();
+    // A Hadamard-folded gate/up input is rotated before it is quantized.  Resolve this device's sign vectors here,
+    // at setup: hadamard_device_signs allocates, and a captured graph must not.
+    had_gu_.assign((size_t) g.n_layers, nullptr);
+    if (lay.native)
+        for (int64_t l = 0; l < g.n_layers; ++l)
+            if (lay.fmt[(size_t) l].had_gu) had_gu_[(size_t) l] = native_expert_gu_signs(lay.fmt[(size_t) l]);
     const char* why = nullptr;
     if (!lay.native) why = "the experts are not a native pack";
     else if (all_resident_) why = "every expert is resident";
@@ -39,6 +45,9 @@ bool Verifier::dm_init(std::string& err) {
     for (int64_t l = 0; why == nullptr && l < g.n_layers; ++l) {
         const auto& f = lay.fmt[(size_t) l];
         if (!dec_moe_formats_ok(f.gu_type, f.d_type, f.n_embd, f.n_ff, f.up_type)) why = "an expert format the kernels do not cover";
+        // the tail quantizes an unrotated input (its activation kernels predate the fold), so a folded layer would
+        // read weights whose values it never rotated
+        if (f.had_gu || f.had_d) why = "Hadamard-folded experts";
     }
     if (why != nullptr) {
         basalt::log::warn("basalt verify", "the device-planned MoE tail is off: %s", why);
@@ -119,7 +128,7 @@ bool Verifier::dm_init(std::string& err) {
         std::vector<NativeExpertLayout> ls((size_t) g.n_layers);
         for (int64_t l = 0; l < g.n_layers; ++l) {
             const auto& f = lay.fmt[(size_t) l];
-            ls[(size_t) l] = native_expert_layout(f.gu_type, f.d_type, f.n_embd, f.n_ff, 0.0f, f.up_type);
+            ls[(size_t) l] = native_expert_layout(f);
             d->pq2 |= f.gu_type == 42;
         }
         d->pblocks = dec_moe_peer_blocks(d->pq2);

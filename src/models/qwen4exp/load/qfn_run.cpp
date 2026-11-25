@@ -229,10 +229,12 @@ int run_engine(Options& o, std::vector<program::GpuCard>& chosen_cards) {
     // windows only (--spec) and its dense projections, head and embedding come from the source tensors.
     {
         const basalt::core::ModelGeometry g0;
-        std::vector<uint8_t> text;
+        std::vector<uint8_t> text, had;
         bool layout_ok = basalt::core::read_range(srcs.experts_layout, text, err) &&
+                         (srcs.experts_hadamard.empty() || basalt::core::read_range(srcs.experts_hadamard, had, err)) &&
                          basalt::kernels::cpu::expert_layout_load_text(std::string(text.begin(), text.end()), g0.n_layers,
-                                                                       g0.n_expert, err, g0.n_embd, g0.n_ff);
+                                                                       g0.n_expert, err, g0.n_embd, g0.n_ff, 0.f,
+                                                                       std::string(had.begin(), had.end()));
         if (!layout_ok) {
             return fatal_start_error(err);
         }
