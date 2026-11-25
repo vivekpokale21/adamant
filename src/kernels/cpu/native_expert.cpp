@@ -201,7 +201,7 @@ bool native_fmt(int gu_type, int d_type, int64_t n_embd, int64_t n_ff, NativeFmt
 void native_quant_act(const NativeFmt& f, const float* x, void* dst) {
     static const bool avx512 = cpu_avx512_ok();
     if (f.had_block > 0 && f.had_gu) {   // Hadamard-folded gate/up: rotate x before quantizing it
-        thread_local float rot[kNativeActBytes];   // n_embd floats (2560 at most here)
+        thread_local float rot[kNativeActBytes];   // one activation's worth; the check above bounds it
         std::memcpy(rot, x, (size_t) f.n_embd * sizeof(float));
         hadamard_rotate(rot, (int) f.n_embd, f.had_block, f.gu_signs);
         x = rot;
