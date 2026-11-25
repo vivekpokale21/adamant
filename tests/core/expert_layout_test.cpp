@@ -97,7 +97,7 @@ void refusals() {
     check(load(layout(5, blob, ""), 2, 512, err), "a v5 layout loads" + (err.empty() ? "" : ": " + err));
     check(load(layout(3, blob, " 100 200 300 shard.gguf"), 2, 512, err),
           "columns past the fifth are ignored" + (err.empty() ? "" : ": " + err));
-    check(!load(layout(8, blob, ""), 2, 512, err) && err.find("v8") != std::string::npos,
+    check(!load(layout(8, blob, " 12", 2, "12 7"), 2, 512, err) && err.find("v8") != std::string::npos,
           "v8 is refused (it needs the pack's experts.hadamard section)");
     // NVFP4: the blob carries a 16-byte FP32 scale tail after down, counted in the blob size
     basalt::kernels::cpu::NativeFmt nv;
